@@ -30,10 +30,9 @@ export default function Home() {
   useEffect(() => {
     try {
       const saved = LS_KEYS.map((k) => localStorage.getItem(k) || "");
-      // Hvis der er mindst én gemt værdi, brug dem
       if (saved.some((v) => v.trim().length > 0)) setCities(saved);
     } catch {
-      // Ignorer (privacy mode osv.)
+      // Ignorer
     }
   }, []);
 
@@ -78,7 +77,7 @@ export default function Home() {
   };
 
   /* =========================================================
-     Afsnit 07 – UI: Weather view
+     Afsnit 07 – UI: Loading
      ========================================================= */
   if (loading) {
     return (
@@ -90,32 +89,28 @@ export default function Home() {
     );
   }
 
+  /* =========================================================
+     Afsnit 08 – UI: Weather view
+     (RETUR håndteres inde i WeatherDetail – så vi undgår 2× RETUR)
+     ========================================================= */
   if (data) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-start px-4 py-8">
-        <div className="w-full max-w-5xl mb-4">
-          <button
-            type="button"
-            onClick={() => {
-              // ✅ RETUR virker nu: tilbage til 4-by skærmen
+        <div className="w-full max-w-5xl">
+          <WeatherDetail
+            data={data}
+            onBack={() => {
               setData(null);
               setError("");
             }}
-            className="text-cyan-300 hover:text-cyan-200 font-semibold flex items-center gap-2"
-          >
-            ← RETUR
-          </button>
-        </div>
-
-        <div className="w-full max-w-5xl">
-          <WeatherDetail data={data} onBack={() => setData(null)} />
+          />
         </div>
       </div>
     );
   }
 
   /* =========================================================
-     Afsnit 08 – UI: 4-city quick access view
+     Afsnit 09 – UI: 4-city quick access view
      ========================================================= */
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-start px-4 py-8">
@@ -130,7 +125,6 @@ export default function Home() {
           VEJR-INTERFACE v2.4
         </div>
 
-        {/* Install-knap (kun synlig når browseren tillader PWA-install) */}
         <div className="mt-4 flex items-center justify-center">
           <InstallButton />
         </div>
@@ -150,36 +144,12 @@ export default function Home() {
 
       {/* 4 by-rækker */}
       <div className="w-full max-w-5xl space-y-4">
-        <CityInput
-          value={cities[0]}
-          onChange={(v) => setCity(0, v)}
-          onSubmit={(c) => loadWeather(c)}
-          placeholder="Indtast by 1…"
-        />
-
-        <CityInput
-          value={cities[1]}
-          onChange={(v) => setCity(1, v)}
-          onSubmit={(c) => loadWeather(c)}
-          placeholder="Indtast by 2…"
-        />
-
-        <CityInput
-          value={cities[2]}
-          onChange={(v) => setCity(2, v)}
-          onSubmit={(c) => loadWeather(c)}
-          placeholder="Indtast by 3…"
-        />
-
-        <CityInput
-          value={cities[3]}
-          onChange={(v) => setCity(3, v)}
-          onSubmit={(c) => loadWeather(c)}
-          placeholder="Indtast by 4…"
-        />
+        <CityInput value={cities[0]} onChange={(v) => setCity(0, v)} onSubmit={(c) => loadWeather(c)} placeholder="Indtast by 1…" />
+        <CityInput value={cities[1]} onChange={(v) => setCity(1, v)} onSubmit={(c) => loadWeather(c)} placeholder="Indtast by 2…" />
+        <CityInput value={cities[2]} onChange={(v) => setCity(2, v)} onSubmit={(c) => loadWeather(c)} placeholder="Indtast by 3…" />
+        <CityInput value={cities[3]} onChange={(v) => setCity(3, v)} onSubmit={(c) => loadWeather(c)} placeholder="Indtast by 4…" />
       </div>
 
-      {/* Hjælpetekst */}
       <div className="mt-8 text-center text-white/60">
         Tip: Gem dine 4 rejse-byer her – tryk <span className="text-white font-semibold">VEJRET</span> på den række du vil se.
       </div>
