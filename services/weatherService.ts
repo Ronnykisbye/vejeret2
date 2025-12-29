@@ -1,110 +1,196 @@
-
-import { GoogleGenAI, Modality } from "@google/genai";
+/* =========================================================
+   Afsnit 01 – Imports & typer
+   ========================================================= */
 import { WeatherData } from "../types";
 
-const API_KEY = process.env.API_KEY || "";
+/* =========================================================
+   Afsnit 02 – Hjælpefunktioner
+   ========================================================= */
 
+// Sikrer at bynavne med æ/ø/å bliver korrekt sendt i URL
+const enc = (s: string) => encodeURIComponent(s.trim());
+
+// Dansk ugedag (kort)
+const dkDayName = (isoDate: string) => {
+  const d = new Date(isoDate + "T12:00:00"); // midt på dagen for at undgå timezone-rod
+  const days = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
+  return days[d.getDay()];
+};
+
+// Open-Meteo vejrkode → dansk “condition”
+const weatherCodeToDanish = (code: number) => {
+  // Kilde: Open-Meteo WMO weather interpretation codes (standard mapping)
+  // (Vi gengiver kun vores egne labels her)
+  if (code === 0) return { condition: "Klar", description: "Klart vejr" };
+  if (code === 1) return { condition: "Let skyet", description: "Overvejende klart med få skyer" };
+  if (code === 2) return { condition: "Delvist skyet", description: "Skiftende skydække" };
+  if (code === 3) return { condition: "Overskyet", description: "Helt overskyet" };
+
+  if (code === 45 || code === 48) return { condition: "Tåge", description: "Tåge eller rimtåge" };
+
+  if (code === 51 || code === 53 || code === 55) return { condition: "Støvregn", description: "Let til kraftig støvregn" };
+  if (code === 56 || code === 57) return { condition: "Isslag", description: "Støvregn med isslag" };
+
+  if (code === 61 || code === 63 || code === 65) return { condition: "Regn", description: "Let til kraftig regn" };
+  if (code === 66 || code === 67) return { condition: "Isslag", description: "Regn med isslag" };
+
+  if (code === 71 || code === 73 || code === 75) return { condition: "Sne", description: "Let til kraftigt snefald" };
+  if (code === 77) return { condition: "Snekorn", description: "Snekorn" };
+
+  if (code === 80 || code === 81 || code === 82) return { condition: "Byger", description: "Regnbyger (let til kraftige)" };
+  if (code === 85 || code === 86) return { condition: "Snebyger", description: "Snebyger (let til kraftige)" };
+
+  if (code === 95) return { condition: "Torden", description: "Tordenvejr" };
+  if (code === 96 || code === 99) return { condition: "Torden med hagl", description: "Tordenvejr med hagl" };
+
+  return { condition: "Ubestemt", description: "Vejrtypen kunne ikke bestemmes" };
+};
+
+// By-opslag via Nominatim (OpenStreetMap)
+const geocodeCity = async (city: string) => {
+  const url =
+    `https://nominatim.openstreetmap.org/search?` +
+    `q=${enc(city)}&format=json&limit=1&addressdetails=1`;
+
+  const res = await fetch(url, {
+    headers: {
+      // Nominatim forventer normalt en User-Agent; i browser kan vi ikke sætte en rigtig UA,
+      // men vi kan sætte en "Accept" og holde os til rimeligt få kald.
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Geocoding fejlede (status ${res.status})`);
+  }
+
+  const data: any[] = await res.json();
+  if (!data?.length) {
+    throw new Error("Ingen by fundet");
+  }
+
+  const hit = data[0];
+  return {
+    lat: Number(hit.lat),
+    lon: Number(hit.lon),
+    displayName: String(hit.display_name || city),
+  };
+};
+
+/* =========================================================
+   Afsnit 03 – Hent vejr (gratis, uden API-key)
+   ========================================================= */
 export const fetchWeatherData = async (city: string): Promise<WeatherData> => {
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
-  
-  const weatherPrompt = `
-    Find accurate and up-to-date weather data for the city: "${city}".
-    I need the current weather (temperature in Celsius, condition, humidity, wind speed) 
-    and a 5-day forecast.
-    
-    You MUST use Google Search to get real-time results.
-    Return the data strictly as a JSON object with this structure:
-    {
-      "current": {
-        "city": "string",
-        "temp": number,
-        "condition": "string",
-        "humidity": number,
-        "windSpeed": "string",
-        "lastUpdated": "string",
-        "description": "string"
-      },
-      "forecast": [
-        {
-          "date": "string (YYYY-MM-DD)",
-          "dayName": "string",
-          "tempHigh": number,
-          "tempLow": number,
-          "condition": "string"
-        }
-      ]
-    }
-    Translate everything into Danish.
-  `;
+  const cleanCity = (city || "").trim();
+  if (!cleanCity) {
+    throw new Error("By-navn mangler");
+  }
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: weatherPrompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
+    // 1) Find koordinater for byen
+    const geo = await geocodeCity(cleanCity);
 
-    const text = response.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Could not parse weather data.");
-    
-    const parsedData = JSON.parse(jsonMatch[0]);
-    
-    // Generate AI Voice Briefing using TTS
-    const summaryText = `Her er din vejr-briefing for ${parsedData.current.city}. Det er i øjeblikket ${Math.round(parsedData.current.temp)} grader med ${parsedData.current.condition}. ${parsedData.current.description}. Hav en god dag.`;
-    
-    let audioBase64 = undefined;
-    try {
-      const speechResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: summaryText }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Zephyr' },
-            },
-          },
-        },
-      });
-      audioBase64 = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    } catch (e) {
-      console.warn("TTS failed, continuing without voice.");
+    // 2) Hent vejr fra Open-Meteo (gratis)
+    const url =
+      `https://api.open-meteo.com/v1/forecast?` +
+      `latitude=${geo.lat}&longitude=${geo.lon}` +
+      `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code` +
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min` +
+      `&timezone=auto&forecast_days=5`;
+
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) {
+      throw new Error(`Vejr-API fejlede (status ${res.status})`);
     }
 
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const sources = groundingChunks
-      .filter((chunk: any) => chunk.web)
-      .map((chunk: any) => ({
-        title: chunk.web.title,
-        uri: chunk.web.uri
-      }));
+    const json: any = await res.json();
 
-    return {
-      ...parsedData,
-      sources,
-      audioData: audioBase64
+    // Current
+    const cTemp = Number(json?.current?.temperature_2m);
+    const cHum = Number(json?.current?.relative_humidity_2m);
+    const cWind = Number(json?.current?.wind_speed_10m);
+    const cCode = Number(json?.current?.weather_code);
+
+    const cText = weatherCodeToDanish(cCode);
+
+    // Daily forecast
+    const dates: string[] = json?.daily?.time || [];
+    const maxs: number[] = json?.daily?.temperature_2m_max || [];
+    const mins: number[] = json?.daily?.temperature_2m_min || [];
+    const codes: number[] = json?.daily?.weather_code || [];
+
+    const forecast = dates.map((date, i) => {
+      const t = weatherCodeToDanish(Number(codes[i]));
+      return {
+        date,
+        dayName: dkDayName(date),
+        tempHigh: Math.round(Number(maxs[i])),
+        tempLow: Math.round(Number(mins[i])),
+        condition: t.condition,
+      };
+    });
+
+    const now = new Date();
+    const lastUpdated = now.toLocaleString("da-DK", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const result: WeatherData = {
+      current: {
+        city: cleanCity,
+        temp: cTemp,
+        condition: cText.condition,
+        humidity: Number.isFinite(cHum) ? cHum : 0,
+        windSpeed: Number.isFinite(cWind) ? `${Math.round(cWind)} km/t` : "–",
+        description: cText.description,
+        lastUpdated,
+      },
+      forecast,
+      sources: [
+        `Open-Meteo (forecast)`,
+        `OpenStreetMap Nominatim (geocoding)`,
+      ],
+      // audioData: (valgfrit) – vi sætter den ikke her, fordi TTS kræver key/backend
     };
-  } catch (error) {
-    console.error("Error fetching weather:", error);
-    throw error;
+
+    return result;
+  } catch (err: any) {
+    // Vi kaster videre – UI viser “Kunne ikke hente vejr…”
+    throw new Error(err?.message || "Kunne ikke hente vejrdata");
   }
 };
 
+/* =========================================================
+   Afsnit 04 – Bysøgning / forslag (gratis)
+   ========================================================= */
 export const fetchCitySuggestions = async (query: string): Promise<string[]> => {
-  if (!query || query.trim().length < 1) return [];
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
-  const prompt = `Giv mig en liste med 5 rigtige bynavne der minder om eller starter med "${query}". Returnér KUN en JSON-array af strenge.`;
+  const q = (query || "").trim();
+  if (!q) return [];
+
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: { responseMimeType: "application/json" },
+    const url =
+      `https://nominatim.openstreetmap.org/search?` +
+      `q=${enc(q)}&format=json&limit=5&addressdetails=1`;
+
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) return [];
+
+    const data: any[] = await res.json();
+    if (!data?.length) return [];
+
+    // Vi forsøger at give pæne, simple navne: "Helsingør, Denmark"
+    const suggestions = data.map((x) => {
+      const name = String(x.display_name || "").split(",").slice(0, 2).join(",").trim();
+      return name || String(x.display_name || "");
     });
-    return JSON.parse(response.text || "[]");
-  } catch (error) {
+
+    // Fjern dubletter
+    return Array.from(new Set(suggestions)).filter(Boolean);
+  } catch {
     return [];
   }
 };
