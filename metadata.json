@@ -1,0 +1,7 @@
+{
+  "name": "NeonSky Weather",
+  "description": "A high-tech neon weather application that uses Gemini with real-time search grounding to provide accurate current conditions and 5-day forecasts.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
