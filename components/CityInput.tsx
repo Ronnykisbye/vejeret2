@@ -1,162 +1,158 @@
+/* =========================================================
+   Afsnit 01 – Imports
+   ========================================================= */
+import React, { useEffect, useRef, useState } from "react";
+import { fetchCitySuggestions } from "../services/weatherService";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { fetchCitySuggestions } from '../services/weatherService';
-
-interface CityInputProps {
-  index: number;
+/* =========================================================
+   Afsnit 02 – Props
+   ========================================================= */
+type CityInputProps = {
   value: string;
-  onChange: (val: string) => void;
-  onSearch: (val: string) => void;
-}
-
-const CityInput: React.FC<CityInputProps> = ({ index, value, onChange, onSearch }) => {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [helpModeActive, setHelpModeActive] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const debounceTimer = useRef<number | null>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Effect to fetch suggestions "as you type" ONLY if help mode is active
-  useEffect(() => {
-    if (!helpModeActive || !value || value.length < 1) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
-
-    if (debounceTimer.current) window.clearTimeout(debounceTimer.current);
-
-    debounceTimer.current = window.setTimeout(async () => {
-      const results = await fetchCitySuggestions(value);
-      setSuggestions(results);
-      setShowSuggestions(results.length > 0);
-    }, 400);
-
-    return () => {
-      if (debounceTimer.current) window.clearTimeout(debounceTimer.current);
-    };
-  }, [value, helpModeActive]);
-
-  const handleButtonClick = async () => {
-    if (!value) return;
-
-    // If suggestions are already showing, we treat this as a final "search now"
-    if (showSuggestions) {
-      setShowSuggestions(false);
-      setHelpModeActive(false);
-      onSearch(value);
-      return;
-    }
-
-    // Activate help mode and fetch first set of suggestions
-    setIsLoading(true);
-    setHelpModeActive(true);
-    try {
-      const results = await fetchCitySuggestions(value);
-      if (results && results.length > 0) {
-        setSuggestions(results);
-        setShowSuggestions(true);
-      } else {
-        // Fallback: search immediately if no suggestions found
-        onSearch(value);
-      }
-    } catch (error) {
-      console.error("Error activating suggestions:", error);
-      onSearch(value);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSelectSuggestion = (city: string) => {
-    onChange(city);
-    setShowSuggestions(false);
-    setHelpModeActive(false);
-    onSearch(city);
-  };
-
-  return (
-    <div className="relative group" ref={dropdownRef}>
-      <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 to-fuchsia-500 rounded-lg blur opacity-30 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
-      <div className="relative flex items-center bg-slate-900 rounded-lg p-1">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={`Indtast by ${index + 1}...`}
-          className="w-full bg-transparent text-white px-4 py-3 outline-none focus:ring-0 placeholder-slate-500 font-medium"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              handleButtonClick();
-            }
-          }}
-        />
-        <button
-          onClick={handleButtonClick}
-          disabled={!value || isLoading}
-          className="ml-2 px-6 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-md font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[140px] relative overflow-hidden"
-        >
-          {isLoading ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-              GÆTTER...
-            </span>
-          ) : (
-            'SØG / HJÆLP'
-          )}
-        </button>
-      </div>
-
-      {/* Suggestions Dropdown */}
-      {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute z-[100] top-full left-0 right-0 mt-2 glass-card border border-cyan-500/50 rounded-xl overflow-hidden shadow-[0_0_40px_rgba(6,182,212,0.4)] animate-in slide-in-from-top-2 duration-300">
-          <div className="p-3 border-b border-white/10 bg-cyan-950/40 flex items-center justify-between">
-            <span className="text-[10px] font-orbitron text-cyan-400 tracking-widest uppercase ml-1">Mente du en af disse?</span>
-            <span className="text-[8px] text-slate-500 uppercase tracking-tighter">Hjælp aktiv</span>
-          </div>
-          <ul className="py-1">
-            {suggestions.map((suggestion, i) => (
-              <li key={i}>
-                <button
-                  onClick={() => handleSelectSuggestion(suggestion)}
-                  className="w-full text-left px-5 py-4 text-slate-200 hover:bg-cyan-500/20 hover:text-white transition-all flex items-center justify-between group/item"
-                >
-                  <span className="font-semibold text-lg tracking-tight group-hover/item:text-cyan-300">{suggestion}</span>
-                  <span className="bg-cyan-500/10 text-cyan-400 text-[10px] px-2 py-1 rounded border border-cyan-500/20 opacity-0 group-hover/item:opacity-100 transition-all uppercase font-orbitron">
-                    Vælg + Søg →
-                  </span>
-                </button>
-              </li>
-            ))}
-            <li className="border-t border-white/5">
-              <button
-                onClick={() => {
-                  setShowSuggestions(false);
-                  setHelpModeActive(false);
-                  onSearch(value);
-                }}
-                className="w-full text-left px-5 py-3 text-slate-500 hover:text-slate-300 text-xs transition-colors flex items-center justify-between group"
-              >
-                <span>Søg på min præcise tekst: "{value}"</span>
-                <span className="text-[10px] opacity-0 group-hover:opacity-100">BRUG INDTASTNING</span>
-              </button>
-            </li>
-          </ul>
-        </div>
-      )}
-    </div>
-  );
+  onChange: (v: string) => void;
+  onSubmit: (city: string) => void;
+  placeholder?: string;
 };
 
-export default CityInput;
+/* =========================================================
+   Afsnit 03 – Component
+   ========================================================= */
+export default function CityInput({
+  value,
+  onChange,
+  onSubmit,
+  placeholder = "Skriv en by…",
+}: CityInputProps) {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const blurTimer = useRef<number | null>(null);
+
+  /* =========================================================
+     Afsnit 04 – Fetch suggestions (debounce)
+     ========================================================= */
+  useEffect(() => {
+    let alive = true;
+    const q = (value || "").trim();
+
+    // Kun dropdown når brugeren faktisk skriver noget
+    if (q.length < 2) {
+      setSuggestions([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const t = window.setTimeout(async () => {
+      try {
+        const list = await fetchCitySuggestions(q);
+        if (!alive) return;
+        setSuggestions(list.slice(0, 6));
+      } catch {
+        if (!alive) return;
+        setSuggestions([]);
+      } finally {
+        if (!alive) return;
+        setLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+  }, [value]);
+
+  /* =========================================================
+     Afsnit 05 – Helpers
+     ========================================================= */
+  const submit = (city: string) => {
+    const c = (city || "").trim();
+    if (!c) return;
+    setOpen(false);
+    setSuggestions([]);
+    onSubmit(c);
+  };
+
+  const handleFocus = () => {
+    if (blurTimer.current) window.clearTimeout(blurTimer.current);
+    setOpen(true);
+  };
+
+  const handleBlur = () => {
+    // Delay så klik på forslag virker
+    blurTimer.current = window.setTimeout(() => setOpen(false), 140);
+  };
+
+  /* =========================================================
+     Afsnit 06 – UI
+     ========================================================= */
+  return (
+    <div className="w-full max-w-5xl mx-auto">
+      <div className="relative">
+        <div className="flex items-stretch gap-3">
+          {/* Input */}
+          <div className="flex-1 relative">
+            <input
+              value={value}
+              onChange={(e) => {
+                onChange(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit(value);
+                if (e.key === "Escape") setOpen(false);
+              }}
+              placeholder={placeholder}
+              autoComplete="off"
+              inputMode="search"
+              className="w-full rounded-xl px-5 py-4 text-lg bg-slate-900/70 border border-white/10 text-white outline-none
+                         focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/20"
+            />
+
+            {/* Dropdown under input */}
+            {open && (loading || suggestions.length > 0) && (
+              <div
+                className="absolute left-0 right-0 mt-2 rounded-xl overflow-hidden border border-white/10
+                           bg-slate-950/95 backdrop-blur-xl shadow-2xl z-50"
+              >
+                {loading && (
+                  <div className="px-4 py-3 text-sm text-slate-300">Søger…</div>
+                )}
+
+                {!loading &&
+                  suggestions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()} // vigtigt så input ikke mister fokus før klik
+                      onClick={() => {
+                        onChange(s);
+                        submit(s);
+                      }}
+                      className="w-full text-left px-4 py-3 text-base text-white hover:bg-cyan-500/10
+                                 focus:outline-none"
+                    >
+                      {s}
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {/* Button */}
+          <button
+            type="button"
+            onClick={() => submit(value)}
+            className="rounded-xl px-7 py-4 font-semibold text-white bg-cyan-500/90 hover:bg-cyan-400
+                       shadow-lg shadow-cyan-500/20 whitespace-nowrap"
+          >
+            VEJRET
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
