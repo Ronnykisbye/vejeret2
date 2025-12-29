@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { WeatherData } from "../types";
+import React, { useEffect, useRef, useState } from 'react';
+import { WeatherData } from '../types';
 
 interface WeatherDetailProps {
   data: WeatherData;
@@ -12,14 +12,17 @@ const WeatherDetail: React.FC<WeatherDetailProps> = ({ data, onBack }) => {
   const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
-    if (data.audioData) {
+    if (data?.audioData) {
       playAudio(data.audioData);
     }
     return () => {
       stopAudio();
       if (audioContextRef.current) {
-        audioContextRef.current.close();
-        audioContextRef.current = null;
+        try {
+          audioContextRef.current.close();
+        } catch {
+          // ignore
+        }
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -33,34 +36,6 @@ const WeatherDetail: React.FC<WeatherDetailProps> = ({ data, onBack }) => {
     return bytes;
   };
 
-  const playAudio = async (base64: string) => {
-    try {
-      stopAudio();
-
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-
-      const audioContext = audioContextRef.current!;
-      const bytes = decode(base64);
-      const audioBuffer = await audioContext.decodeAudioData(bytes.buffer.slice(0));
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
-
-      source.onended = () => {
-        setIsPlaying(false);
-        sourceNodeRef.current = null;
-      };
-
-      sourceNodeRef.current = source;
-      source.start(0);
-      setIsPlaying(true);
-    } catch {
-      // Hvis audio fejler, ignorer og fortsæt
-    }
-  };
-
   const stopAudio = () => {
     try {
       if (sourceNodeRef.current) {
@@ -69,19 +44,98 @@ const WeatherDetail: React.FC<WeatherDetailProps> = ({ data, onBack }) => {
         sourceNodeRef.current = null;
       }
     } catch {
-      // Ignorer
+      // ignore
     } finally {
       setIsPlaying(false);
     }
   };
 
+  const playAudio = async (base64: string) => {
+    try {
+      stopAudio();
+
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+
+      const ctx = audioContextRef.current!;
+      const bytes = decode(base64);
+      const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.onended = () => setIsPlaying(false);
+
+      sourceNodeRef.current = source;
+      setIsPlaying(true);
+      source.start();
+    } catch (e) {
+      console.error("Audio playback error:", e);
+      setIsPlaying(false);
+    }
+  };
+
   const toggleAudio = () => {
-    if (!data.audioData) return;
+    if (!data?.audioData) return;
     if (isPlaying) stopAudio();
     else playAudio(data.audioData);
   };
 
-  const cityName = (data.city || "").toUpperCase();
+  if (!data || !data.current) return null;
+
+  const { current, forecast, sources = [] } = data;
+
+  /* =========================================================
+     Afsnit 01 – Robust mapping (så 0° ikke opstår pga. forkert feltnavn)
+     ========================================================= */
+  const cityName =
+    (data as any).city ||
+    (current as any).city ||
+    "";
+
+  const tempValueRaw =
+    (current as any).temperature ??
+    (current as any).temp ??
+    null;
+
+  const tempValue =
+    typeof tempValueRaw === "number" ? tempValueRaw : (tempValueRaw ? Number(tempValueRaw) : null);
+
+  const humidity =
+    (current as any).humidity ?? null;
+
+  const windSpeed =
+    (current as any).windSpeed ?? (current as any).wind ?? null;
+
+  const lastUpdated =
+    (current as any).lastUpdated ?? (current as any).updatedAt ?? (current as any).time ?? "";
+
+  const condition =
+    (current as any).condition ?? "";
+
+  const description =
+    (current as any).description ?? "Vejrstatus";
+
+  /* =========================================================
+     Afsnit 02 – Visuals
+     ========================================================= */
+  const getWeatherVisuals = (cond: string) => {
+    const c = (cond || "").toLowerCase();
+    if (c.includes('sol') || c.includes('klar')) return { icon: '☀️', color: 'rgba(253, 224, 71, 0.8)', effect: 'sun-glow' };
+    if (c.includes('regn') || c.includes('byger')) return { icon: '🌧️', color: 'rgba(59, 130, 246, 0.8)', effect: 'rain-fall' };
+    if (c.includes('sky') || c.includes('overskyet')) return { icon: '☁️', color: 'rgba(148, 163, 184, 0.8)', effect: 'cloud-drift' };
+    if (c.includes('sne')) return { icon: '❄️', color: 'rgba(255, 255, 255, 0.85)', effect: 'snow-fall' };
+    return { icon: '🌡️', color: 'rgba(34, 211, 238, 0.8)', effect: 'neon-pulse' };
+  };
+
+  const visual = getWeatherVisuals(condition);
+
+  const statItems = [
+    { label: 'FUGTIGHED', value: humidity !== null ? `${humidity}%` : '—', icon: '💧' },
+    { label: 'VIND', value: windSpeed !== null ? `${windSpeed} KM/T` : '—', icon: '🌬️' },
+    { label: 'OPDATERET', value: lastUpdated || '—', icon: '⏱️' },
+    { label: 'STATUS', value: 'SYNKRONISERET', icon: '🛰️' },
+  ];
 
   return (
     <div className="w-full">
@@ -113,86 +167,98 @@ const WeatherDetail: React.FC<WeatherDetailProps> = ({ data, onBack }) => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: City + temp */}
+          {/* Left */}
           <div className="lg:col-span-2">
-            {/* ✅ FIX: Mindre og wrap så hele bynavnet kan ses */}
+            {/* ✅ FIX: By-navn kommer fra data.city, ikke current.city */}
             <h2
               className="
                 text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-wide text-white/90
-                leading-[0.95]
-                break-words whitespace-normal
-                max-w-full
+                leading-[0.95] break-words whitespace-normal max-w-full
               "
-              title={data.city}
+              title={cityName}
             >
-              {cityName}
+              {(cityName || "—").toUpperCase()}
             </h2>
 
-            <div className="mt-2 text-white/70 italic text-lg md:text-xl">
-              “{data.description || "Vejrstatus"}”
-            </div>
+            <p className="text-xl text-slate-400 mb-8 font-medium italic">
+              “{description}”
+            </p>
 
-            <div className="mt-8 flex items-end gap-6">
+            <div className="flex items-end gap-6">
               <div className="text-7xl md:text-8xl font-extrabold text-white">
-                {Math.round(data.temperature ?? 0)}
-                <span className="text-cyan-400">°</span>
+                {tempValue !== null && !Number.isNaN(tempValue) ? Math.round(tempValue) : "—"}
+                <span className="text-cyan-500">°</span>
               </div>
 
-              {data.icon && (
-                <div className="flex items-center gap-3">
-                  <img src={data.icon} alt="Vejr ikon" className="w-16 h-16 md:w-20 md:h-20" />
-                  <div className="text-2xl md:text-3xl font-extrabold tracking-wide text-white">
-                    {data.condition || ""}
-                  </div>
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                <span className="text-5xl" style={{ filter: `drop-shadow(0 0 18px ${visual.color})` }}>
+                  {visual.icon}
+                </span>
+                <span className="text-2xl font-bold text-slate-100 uppercase tracking-widest neon-text-cyan">
+                  {condition || "—"}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Right: Stats */}
+          {/* Right stats */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-              <div className="text-white/50 text-xs font-semibold tracking-widest">FUGTIGHED</div>
-              <div className="mt-2 text-white text-xl font-bold">{data.humidity ?? 0}%</div>
-            </div>
+            {statItems.map((stat) => (
+              <div key={stat.label} className="rounded-2xl bg-white/5 border border-white/10 p-4">
+                <div className="text-white/50 text-xs font-semibold tracking-widest">
+                  {stat.label}
+                </div>
 
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-              <div className="text-white/50 text-xs font-semibold tracking-widest">VIND</div>
-              <div className="mt-2 text-white text-xl font-bold">{Math.round(data.windSpeed ?? 0)} KM/T</div>
-            </div>
-
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-              <div className="text-white/50 text-xs font-semibold tracking-widest">OPDATERET</div>
-              <div className="mt-2 text-white text-lg font-bold">{data.updatedAt || ""}</div>
-            </div>
-
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-              <div className="text-white/50 text-xs font-semibold tracking-widest">STATUS</div>
-              <div className="mt-2 text-cyan-300 text-lg font-bold">SYNKRONISERET</div>
-            </div>
+                {/* ✅ FIX: “SYNKRONISERET” mindre og må gerne wrap */}
+                <div
+                  className={
+                    stat.label === "STATUS"
+                      ? "mt-2 text-cyan-300 text-base md:text-lg font-bold break-words leading-tight"
+                      : "mt-2 text-white text-xl font-bold"
+                  }
+                >
+                  <span className="text-base grayscale opacity-50">{stat.icon}</span> {stat.value}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Forecast */}
-        {Array.isArray(data.forecast) && data.forecast.length > 0 && (
+        {Array.isArray(forecast) && forecast.length > 0 && (
           <div className="mt-10">
             <div className="text-2xl font-extrabold tracking-wide text-white">5-DAGES PROGNOSE</div>
 
             <div className="mt-5 grid grid-cols-2 md:grid-cols-5 gap-4">
-              {data.forecast.slice(0, 5).map((d: any, i: number) => (
+              {forecast.slice(0, 5).map((day: any, i: number) => (
                 <div key={i} className="rounded-2xl bg-white/5 border border-white/10 p-4">
-                  <div className="text-xs font-bold tracking-widest text-fuchsia-300">{(d.dayName || "").toUpperCase()}</div>
-                  <div className="text-white/50 text-xs mt-1">{d.date || ""}</div>
+                  <div className="text-xs font-bold tracking-widest text-fuchsia-300">
+                    {(day.dayName || "").toUpperCase()}
+                  </div>
+                  <div className="text-white/50 text-xs mt-1">{day.date || ""}</div>
 
                   <div className="mt-4 text-3xl font-extrabold text-white">
-                    {Math.round(d.max ?? 0)}°
-                    <span className="text-white/30 text-lg font-bold">/{Math.round(d.min ?? 0)}°</span>
+                    {day.tempHigh ?? "—"}°<span className="text-slate-600 text-xl font-medium ml-1">/ {day.tempLow ?? "—"}°</span>
                   </div>
 
-                  <div className="mt-3 text-white/70 text-xs font-semibold">{(d.summary || "").toUpperCase()}</div>
+                  <div className="mt-3 text-white/70 text-xs font-semibold">
+                    {(day.condition || "").toUpperCase()}
+                  </div>
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Sources (valgfrit – hvis du vil vise kilder) */}
+        {Array.isArray(sources) && sources.length > 0 && (
+          <div className="mt-10 text-white/50 text-xs">
+            <div className="font-semibold tracking-widest mb-2">KILDER</div>
+            <ul className="list-disc pl-5 space-y-1">
+              {sources.slice(0, 5).map((s: any, idx: number) => (
+                <li key={idx}>{s?.title || s?.url || "Kilde"}</li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
