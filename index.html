@@ -1,68 +1,72 @@
-
 <!DOCTYPE html>
 <html lang="da">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeonSky Weather</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #020617;
-            color: #f8fafc;
-            font-family: 'Inter', sans-serif;
-            overflow-x: hidden;
-        }
-        .font-orbitron { font-family: 'Orbitron', sans-serif; }
-        .neon-text-cyan { text-shadow: 0 0 8px rgba(34, 211, 238, 0.8); }
-        .neon-text-pink { text-shadow: 0 0 8px rgba(244, 114, 182, 0.8); }
-        .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        
-        /* Animations */
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
-        @keyframes bounce-slow { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-        @keyframes loading-bar { 0% { width: 0%; } 100% { width: 100%; } }
-        .animate-pulse-slow { animation: pulse 4s infinite; }
-        .animate-bounce-slow { animation: bounce-slow 3s ease-in-out infinite; }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NeonSky Weather</title>
 
-        /* Weather Effects */
-        .rain-fall::before {
-            content: ""; position: absolute; inset: 0;
-            background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
-            background-size: 100% 100px;
-            animation: rain 0.5s linear infinite; pointer-events: none; opacity: 0.3;
-        }
-        @keyframes rain { 0% { background-position: 0 0; } 100% { background-position: 10px 100px; } }
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 
-        .sun-glow::after {
-            content: ""; position: absolute; top: -10%; right: -10%; width: 60%; height: 60%;
-            background: radial-gradient(circle, rgba(253,224,71,0.08) 0%, transparent 70%);
-            filter: blur(80px); pointer-events: none; animation: sun-pulse 8s infinite;
-        }
-        @keyframes sun-pulse { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.2); opacity: 0.8; } }
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #020617;
+      color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+    .font-orbitron { font-family: 'Orbitron', sans-serif; }
+    .neon-text-cyan { text-shadow: 0 0 8px rgba(34, 211, 238, 0.8); }
+    .neon-text-pink { text-shadow: 0 0 8px rgba(244, 114, 182, 0.8); }
+    .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
 
-        .cloud-drift::before {
-            content: ""; position: absolute; inset: 0;
-            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 50%);
-            animation: drift 20s linear infinite; pointer-events: none;
-        }
-        @keyframes drift { 0% { transform: translateX(-20%); } 100% { transform: translateX(20%); } }
-    </style>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
+    @keyframes bounce-slow { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes loading-bar { 0% { width: 0%; } 100% { width: 100%; } }
+    .animate-pulse-slow { animation: pulse 4s infinite; }
+    .animate-bounce-slow { animation: bounce-slow 3s ease-in-out infinite; }
+
+    .rain-fall::before {
+      content: ""; position: absolute; inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
+      background-size: 100% 100px;
+      animation: rain 0.5s linear infinite; pointer-events: none; opacity: 0.3;
+    }
+    @keyframes rain { 0% { background-position: 0 0; } 100% { background-position: 10px 100px; } }
+
+    .sun-glow::after {
+      content: ""; position: absolute; top: -10%; right: -10%; width: 60%; height: 60%;
+      background: radial-gradient(circle, rgba(253,224,71,0.08) 0%, transparent 70%);
+      filter: blur(80px); pointer-events: none; animation: sun-pulse 8s infinite;
+    }
+    @keyframes sun-pulse { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.2); opacity: 0.8; } }
+
+    .cloud-drift::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 50%);
+      animation: drift 20s linear infinite; pointer-events: none;
+    }
+    @keyframes drift { 0% { transform: translateX(-20%); } 100% { transform: translateX(20%); } }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "react/": "https://esm.sh/react@^19.2.3/",
+      "react": "https://esm.sh/react@^19.2.3",
+      "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+      "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
+    }
   }
-}
-</script>
+  </script>
 </head>
+
 <body>
-    <div id="root"></div>
+  <div id="root"></div>
+
+  <!-- ✅ VIGTIGT: Starter din React/Vite app -->
+  <script type="module" src="/index.tsx"></script>
 </body>
 </html>
